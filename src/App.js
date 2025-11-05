@@ -129,12 +129,12 @@ export default function VisionChat() {
     return lines.map((line, idx) => {
       // LaTeX inline math: \(...\)
       if (line.includes('\\(') && line.includes('\\)')) {
-        const parts = line.split(/(\\[([^\]]+)\\])/);
+        const parts = line.split(/(\\[[^\]]+\\])/);
         return (
           <p key={idx} className="mb-2 leading-relaxed">
             {parts.map((part, i) => {
-              if (part.match(/\\[([^\]]+)\\]/)) {
-                const formula = part.replace(/\\[|\\]/g, '');
+              if (part.match(/\\[[^\]]+\\]/)) {
+                const formula = part.replace(/\\\[|\\\]/g, '');
                 return (
                   <code key={i} className="bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-mono text-sm mx-1">
                     {formula}
@@ -149,7 +149,7 @@ export default function VisionChat() {
       
       // LaTeX block math: \[...\]
       if (line.includes('\\[') && line.includes('\\]')) {
-        const formula = line.replace(/\\[|\\]/g, '').trim();
+        const formula = line.replace(/\\\[|\\\]/g, '').trim();
         return (
           <div key={idx} className="my-3 p-3 bg-gray-800 rounded-lg border border-gray-600">
             <code className="text-blue-200 font-mono text-base block text-center">
@@ -161,7 +161,8 @@ export default function VisionChat() {
 
       // Boxed answer
       if (line.includes('$\\boxed{')) {
-        const answer = line.match(/\$\\boxed\{([^}]+)\}\$/)?.[1];
+        const answerMatch = line.match(/\$\\boxed\{([^}]+)\}\$/);
+        const answer = answerMatch ? answerMatch[1] : '';
         return (
           <div key={idx} className="my-3 p-4 bg-gradient-to-r from-green-900 to-blue-900 rounded-lg border-2 border-green-500">
             <p className="text-lg font-bold text-center text-green-200">
