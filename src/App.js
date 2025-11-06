@@ -25,31 +25,31 @@ export default function VisionChat() {
       setUploading(true);
       setUploadError('');
 
-      // Check file size (max 200MB for Catbox)
+      // Check file size (max 200MB)
       if (file.size > 200 * 1024 * 1024) {
         throw new Error('File too large. Max size is 200MB');
       }
 
       const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('fileToUpload', file);
+      formData.append('file', file);
 
-      const response = await fetch('https://catbox.moe/user/api.php', {
+      const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Upload failed: ${response.status}`);
       }
 
-      const url = await response.text();
+      const data = await response.json();
       
-      if (!url || url.trim() === '' || url.includes('error') || url.includes('Error')) {
-        throw new Error('Invalid response from Catbox');
+      if (!data.success || !data.data.url) {
+        throw new Error('Invalid response from server');
       }
 
-      return url.trim();
+      return data.data.url;
     } catch (error) {
       console.error('Upload error:', error);
       setUploadError(error.message);
@@ -74,7 +74,7 @@ export default function VisionChat() {
       reader.onload = (e) => setSelectedImage(e.target.result);
       reader.readAsDataURL(file);
 
-      // Upload to Catbox
+      // Upload to Catbox via serverless function
       const url = await uploadToCatbox(file);
       setImageUrl(url);
       
@@ -95,11 +95,9 @@ export default function VisionChat() {
   };
 
   const formatResponse = (text) => {
-    // Split by headers (##)
     const sections = text.split(/(?=##\s)/);
     
     return sections.map((section, idx) => {
-      // Check if it's a header
       const headerMatch = section.match(/^##\s*(.+?)$/m);
       
       if (headerMatch) {
