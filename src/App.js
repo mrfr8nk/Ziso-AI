@@ -274,11 +274,11 @@ export default function VisionChat() {
     // Remove \text{...} formatting but keep the text
     rendered = rendered.replace(/\\text\{([^}]+)\}/g, '$1');
 
-    // Handle fractions \frac{a}{b}
+    // Handle fractions \frac{a}{b} BEFORE handling superscripts/subscripts
     rendered = rendered.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
 
-    // Handle superscripts ^{...} with Unicode superscript numbers
-    rendered = rendered.replace(/\^?\{([^}]+)\}/g, (match, content) => {
+    // Handle superscripts ^{...} with Unicode superscript numbers - ONLY if preceded by ^
+    rendered = rendered.replace(/\^\{([^}]+)\}/g, (match, content) => {
       const superscriptMap = {
         '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
         '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
@@ -293,7 +293,8 @@ export default function VisionChat() {
         '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
         '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
         '-': '₋', '+': '₊', '=': '₌', '(': '₍', ')': '₎',
-        'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'k': 'ₖ'
+        'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ', 'k': 'ₖ',
+        'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ', 's': 'ₛ', 't': 'ₜ'
       };
       return content.split('').map(c => subscriptMap[c] || c).join('');
     });
