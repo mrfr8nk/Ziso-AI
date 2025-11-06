@@ -25,31 +25,31 @@ export default function VisionChat() {
       setUploading(true);
       setUploadError('');
 
-      // Check file size (max 200MB)
+      // Check file size (max 200MB for Catbox)
       if (file.size > 200 * 1024 * 1024) {
         throw new Error('File too large. Max size is 200MB');
       }
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('reqtype', 'fileupload');
+      formData.append('fileToUpload', file);
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('https://catbox.moe/user/api.php', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Upload failed: ${response.status}`);
+        throw new Error(`Upload failed: ${response.status}`);
       }
 
-      const data = await response.json();
+      const url = await response.text();
       
-      if (!data.success || !data.data.url) {
-        throw new Error('Invalid response from server');
+      if (!url || url.trim() === '' || url.includes('error') || url.includes('Error')) {
+        throw new Error('Invalid response from Catbox');
       }
 
-      return data.data.url;
+      return url.trim();
     } catch (error) {
       console.error('Upload error:', error);
       setUploadError(error.message);
@@ -74,7 +74,7 @@ export default function VisionChat() {
       reader.onload = (e) => setSelectedImage(e.target.result);
       reader.readAsDataURL(file);
 
-      // Upload to Catbox via serverless function
+      // Upload to Catbox
       const url = await uploadToCatbox(file);
       setImageUrl(url);
       
@@ -95,9 +95,11 @@ export default function VisionChat() {
   };
 
   const formatResponse = (text) => {
+    // Split by headers (##)
     const sections = text.split(/(?=##\s)/);
     
     return sections.map((section, idx) => {
+      // Check if it's a header
       const headerMatch = section.match(/^##\s*(.+?)$/m);
       
       if (headerMatch) {
@@ -125,34 +127,30 @@ export default function VisionChat() {
     const lines = text.split('\n').filter(line => line.trim());
     
     return lines.map((line, idx) => {
-      // LaTeX inline math: \(...\)
-      if (line.includes('\\(') && line.includes('\\)')) {
-        const parts = line.split(/(\\[[^\]]+\\])/);
+      // Process inline math $...$ 
+      const processInlineMath = (text) => {
+        const parts = text.split(/(\$[^$]+\$)/g);
+        return parts.map((part, i) => {
+          if (part.startsWith('$') && part.endsWith('$')) {
+            const formula = part.slice(1, -1);
+            return (
+              <span key={i} className="inline-block bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-medium mx-1">
+                {formula}
+              </span>
+            );
+          }
+          return <span key={i}>{part}</span>;
+        });
+      };
+
+      // Block math display (standalone formulas)
+      if (line.match(/^\$[^$]+\$$/)) {
+        const formula = line.slice(1, -1);
         return (
-          <p key={idx} className="mb-2 leading-relaxed">
-            {parts.map((part, i) => {
-              if (part.match(/\\[[^\]]+\\]/)) {
-                const formula = part.replace(/\\\[|\\\]/g, '');
-                return (
-                  <code key={i} className="bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-mono text-sm mx-1">
-                    {formula}
-                  </code>
-                );
-              }
-              return <span key={i}>{part}</span>;
-            })}
-          </p>
-        );
-      }
-      
-      // LaTeX block math: \[...\]
-      if (line.includes('\\[') && line.includes('\\]')) {
-        const formula = line.replace(/\\\[|\\\]/g, '').trim();
-        return (
-          <div key={idx} className="my-3 p-3 bg-gray-800 rounded-lg border border-gray-600">
-            <code className="text-blue-200 font-mono text-base block text-center">
+          <div key={idx} className="my-3 p-4 bg-gray-800 rounded-lg border border-gray-600">
+            <div className="text-blue-200 font-medium text-lg text-center">
               {formula}
-            </code>
+            </div>
           </div>
         );
       }
@@ -162,15 +160,24 @@ export default function VisionChat() {
         const answerMatch = line.match(/\$\\boxed\{([^}]+)\}\$/);
         const answer = answerMatch ? answerMatch[1] : '';
         return (
-          <div key={idx} className="my-3 p-4 bg-gradient-to-r from-green-900 to-blue-900 rounded-lg border-2 border-green-500">
-            <p className="text-lg font-bold text-center text-green-200">
-              Final Answer: <span className="text-white">{answer}</span>
+          <div key={idx} className="my-4 p-4 bg-gradient-to-r from-green-900 to-blue-900 rounded-lg border-2 border-green-500">
+            <p className="text-xl font-bold text-center text-green-200">
+              Final Answer: <span className="text-white text-2xl">{answer}</span>
             </p>
           </div>
         );
       }
 
-      // Regular text
+      // Regular text with inline math
+      if (line.includes('$')) {
+        return (
+          <p key={idx} className="mb-2 leading-relaxed">
+            {processInlineMath(line)}
+          </p>
+        );
+      }
+
+      // Plain text
       return <p key={idx} className="mb-2 leading-relaxed">{line}</p>;
     });
   };
