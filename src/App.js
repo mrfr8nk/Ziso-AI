@@ -271,8 +271,44 @@ export default function VisionChat() {
       .replace(/\\pm/g, '±')
       .replace(/\\sqrt/g, '√');
 
+    // Remove \text{...} formatting but keep the text
+    rendered = rendered.replace(/\\text\{([^}]+)\}/g, '$1');
+
     // Handle fractions \frac{a}{b}
     rendered = rendered.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
+
+    // Handle superscripts ^{...} with Unicode superscript numbers
+    rendered = rendered.replace(/\^?\{([^}]+)\}/g, (match, content) => {
+      const superscriptMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+        '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        '-': '⁻', '+': '⁺', '=': '⁼', '(': '⁽', ')': '⁾'
+      };
+      return content.split('').map(c => superscriptMap[c] || c).join('');
+    });
+
+    // Handle subscripts _{...} with Unicode subscript numbers
+    rendered = rendered.replace(/\_\{([^}]+)\}/g, (match, content) => {
+      const subscriptMap = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+        '-': '₋', '+': '₊', '=': '₌', '(': '₍', ')': '₎',
+        'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'k': 'ₖ'
+      };
+      return content.split('').map(c => subscriptMap[c] || c).join('');
+    });
+
+    // Handle simple superscripts without braces (e.g., ^2, ^3)
+    rendered = rendered.replace(/\^([0-9])/g, (match, num) => {
+      const superscriptMap = {'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'};
+      return superscriptMap[num] || num;
+    });
+
+    // Handle simple subscripts without braces (e.g., _1, _2)
+    rendered = rendered.replace(/\_([0-9a-z])/g, (match, char) => {
+      const subscriptMap = {'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'};
+      return subscriptMap[char] || char;
+    });
 
     return rendered;
   };
