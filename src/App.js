@@ -95,13 +95,32 @@ export default function VisionChat() {
   };
 
   const formatResponse = (text) => {
-    const sections = text.split(/(?=##\s)/);
+    // Split by ## headers (h2) and ### headers (h3)
+    const sections = text.split(/(?=###?\s)/);
     
     return sections.map((section, idx) => {
-      const headerMatch = section.match(/^##\s*(.+?)$/m);
+      // Check for ### header (h3)
+      const h3Match = section.match(/^###\s*(.+?)$/m);
+      if (h3Match) {
+        const headerText = h3Match[1];
+        const content = section.replace(/^###\s*.+?$/m, '').trim();
+        
+        return (
+          <div key={idx} className="mb-3">
+            <h4 className="text-base font-bold text-purple-300 mb-2">
+              {headerText}
+            </h4>
+            <div className="pl-3 space-y-2">
+              {formatContent(content)}
+            </div>
+          </div>
+        );
+      }
       
-      if (headerMatch) {
-        const headerText = headerMatch[1];
+      // Check for ## header (h2)
+      const h2Match = section.match(/^##\s*(.+?)$/m);
+      if (h2Match) {
+        const headerText = h2Match[1];
         const content = section.replace(/^##\s*.+?$/m, '').trim();
         
         return (
@@ -115,9 +134,27 @@ export default function VisionChat() {
             </div>
           </div>
         );
-      } else {
-        return <div key={idx} className="mb-3">{formatContent(section)}</div>;
       }
+      
+      // Check for # header (h1)
+      const h1Match = section.match(/^#\s*(.+?)$/m);
+      if (h1Match) {
+        const headerText = h1Match[1];
+        const content = section.replace(/^#\s*.+?$/m, '').trim();
+        
+        return (
+          <div key={idx} className="mb-5">
+            <h2 className="text-xl font-bold text-cyan-300 mb-3">
+              {headerText}
+            </h2>
+            <div className="space-y-2">
+              {formatContent(content)}
+            </div>
+          </div>
+        );
+      }
+      
+      return <div key={idx} className="mb-3">{formatContent(section)}</div>;
     });
   };
 
@@ -125,26 +162,6 @@ export default function VisionChat() {
     const lines = text.split('\n').filter(line => line.trim());
     
     return lines.map((line, idx) => {
-      // LaTeX inline math: \(...\)
-      if (line.includes('\\(') && line.includes('\\)')) {
-        const parts = line.split(/(\\[[^\]]+\\])/);
-        return (
-          <p key={idx} className="mb-2 leading-relaxed">
-            {parts.map((part, i) => {
-              if (part.match(/\\[[^\]]+\\]/)) {
-                const formula = part.replace(/\\\[|\\\]/g, '');
-                return (
-                  <code key={i} className="bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-mono text-sm mx-1">
-                    {formula}
-                  </code>
-                );
-              }
-              return <span key={i}>{part}</span>;
-            })}
-          </p>
-        );
-      }
-      
       // LaTeX block math: \[...\]
       if (line.includes('\\[') && line.includes('\\]')) {
         const formula = line.replace(/\\\[|\\\]/g, '').trim();
@@ -157,7 +174,7 @@ export default function VisionChat() {
         );
       }
 
-      // Boxed answer
+      // Boxed answer (LaTeX)
       if (line.includes('$\\boxed{')) {
         const answerMatch = line.match(/\$\\boxed\{([^}]+)\}\$/);
         const answer = answerMatch ? answerMatch[1] : '';
@@ -170,9 +187,64 @@ export default function VisionChat() {
         );
       }
 
-      // Regular text
-      return <p key={idx} className="mb-2 leading-relaxed">{line}</p>;
+      // Process line with inline LaTeX \(...\) and bold **...**
+      const processedLine = formatInlineElements(line);
+      
+      return (
+        <p key={idx} className="mb-2 leading-relaxed">
+          {processedLine}
+        </p>
+      );
     });
+  };
+
+  const formatInlineElements = (text) => {
+    const parts = [];
+    let currentIndex = 0;
+    let key = 0;
+
+    // Regex to match \(...\) or **...**
+    const regex = /(\\\(.*?\\\)|\*\*.*?\*\*)/g;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the match
+      if (match.index > currentIndex) {
+        parts.push(
+          <span key={key++}>{text.substring(currentIndex, match.index)}</span>
+        );
+      }
+
+      const matched = match[0];
+
+      // Check if it's LaTeX inline math \(...\)
+      if (matched.startsWith('\\(') && matched.endsWith('\\)')) {
+        const formula = matched.replace(/\\\(|\\\)/g, '');
+        parts.push(
+          <code key={key++} className="bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-mono text-sm mx-1">
+            {formula}
+          </code>
+        );
+      }
+      // Check if it's bold **...**
+      else if (matched.startsWith('**') && matched.endsWith('**')) {
+        const boldText = matched.replace(/\*\*/g, '');
+        parts.push(
+          <strong key={key++} className="font-bold text-white">
+            {boldText}
+          </strong>
+        );
+      }
+
+      currentIndex = match.index + matched.length;
+    }
+
+    // Add remaining text
+    if (currentIndex < text.length) {
+      parts.push(<span key={key++}>{text.substring(currentIndex)}</span>);
+    }
+
+    return parts.length > 0 ? parts : text;
   };
 
   const processWithVision = async (question, imgUrl) => {
