@@ -165,10 +165,11 @@ export default function VisionChat() {
       // LaTeX block math: \[...\]
       if (line.includes('\\[') && line.includes('\\]')) {
         const formula = line.replace(/\\\[|\\\]/g, '').trim();
+        const rendered = renderLatex(formula);
         return (
           <div key={idx} className="my-3 p-3 bg-gray-800 rounded-lg border border-gray-600">
             <code className="text-blue-200 font-mono text-base block text-center">
-              {formula}
+              {rendered}
             </code>
           </div>
         );
@@ -220,9 +221,10 @@ export default function VisionChat() {
       // Check if it's LaTeX inline math \(...\)
       if (matched.startsWith('\\(') && matched.endsWith('\\)')) {
         const formula = matched.replace(/\\\(|\\\)/g, '');
+        const rendered = renderLatex(formula);
         parts.push(
           <code key={key++} className="bg-blue-900 bg-opacity-30 px-2 py-1 rounded text-blue-200 font-mono text-sm mx-1">
-            {formula}
+            {rendered}
           </code>
         );
       }
@@ -245,6 +247,34 @@ export default function VisionChat() {
     }
 
     return parts.length > 0 ? parts : text;
+  };
+
+  const renderLatex = (formula) => {
+    // Replace common LaTeX commands with Unicode symbols
+    let rendered = formula
+      .replace(/\\pi/g, 'π')
+      .replace(/\\times/g, '×')
+      .replace(/\\cdot/g, '·')
+      .replace(/\\alpha/g, 'α')
+      .replace(/\\beta/g, 'β')
+      .replace(/\\gamma/g, 'γ')
+      .replace(/\\delta/g, 'δ')
+      .replace(/\\theta/g, 'θ')
+      .replace(/\\lambda/g, 'λ')
+      .replace(/\\mu/g, 'μ')
+      .replace(/\\sigma/g, 'σ')
+      .replace(/\\infty/g, '∞')
+      .replace(/\\approx/g, '≈')
+      .replace(/\\neq/g, '≠')
+      .replace(/\\leq/g, '≤')
+      .replace(/\\geq/g, '≥')
+      .replace(/\\pm/g, '±')
+      .replace(/\\sqrt/g, '√');
+
+    // Handle fractions \frac{a}{b}
+    rendered = rendered.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
+
+    return rendered;
   };
 
   const processWithVision = async (question, imgUrl) => {
