@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Image, Loader2, X, AlertCircle } from 'lucide-react';
+import { Send, Upload, Image, Loader2, X, AlertCircle, Copy, Share2, Redo } from 'lucide-react';
 
 export default function VisionChat() {
   const [messages, setMessages] = useState([]);
@@ -25,7 +25,6 @@ export default function VisionChat() {
       setUploading(true);
       setUploadError('');
 
-      // Check file size (max 200MB)
       if (file.size > 200 * 1024 * 1024) {
         throw new Error('File too large. Max size is 200MB');
       }
@@ -69,16 +68,13 @@ export default function VisionChat() {
     }
 
     try {
-      // Create preview
       const reader = new FileReader();
       reader.onload = (e) => setSelectedImage(e.target.result);
       reader.readAsDataURL(file);
 
-      // Upload to Catbox via serverless function
       const url = await uploadToCatbox(file);
       setImageUrl(url);
       
-      // Add system message
       setMessages(prev => [...prev, {
         type: 'system',
         content: `✅ Image uploaded successfully!\n📎 URL: ${url}`,
@@ -94,12 +90,49 @@ export default function VisionChat() {
     }
   };
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const shareContent = async () => {
+    if (messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    const shareText = `AI Vision Chat - ${lastMessage.content.substring(0, 100)}...`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'AI Vision Chat',
+          text: shareText,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    } else {
+      // Fallback: copy to clipboard
+      await copyToClipboard(shareText + '\n\n' + window.location.href);
+      alert('Conversation copied to clipboard!');
+    }
+  };
+
+  const redoLastQuestion = () => {
+    const lastUserMessage = [...messages].reverse().find(msg => msg.type === 'user');
+    if (lastUserMessage) {
+      setInput(lastUserMessage.content);
+    }
+  };
+
   const formatResponse = (text) => {
-    // Split by ## headers (h2) and ### headers (h3)
     const sections = text.split(/(?=###?\s)/);
     
     return sections.map((section, idx) => {
-      // Check for ### header (h3)
       const h3Match = section.match(/^###\s*(.+?)$/m);
       if (h3Match) {
         const headerText = h3Match[1];
@@ -117,7 +150,6 @@ export default function VisionChat() {
         );
       }
       
-      // Check for ## header (h2)
       const h2Match = section.match(/^##\s*(.+?)$/m);
       if (h2Match) {
         const headerText = h2Match[1];
@@ -136,7 +168,6 @@ export default function VisionChat() {
         );
       }
       
-      // Check for # header (h1)
       const h1Match = section.match(/^#\s*(.+?)$/m);
       if (h1Match) {
         const headerText = h1Match[1];
@@ -179,16 +210,17 @@ export default function VisionChat() {
       if (line.includes('$\\boxed{')) {
         const answerMatch = line.match(/\$\\boxed\{([^}]+)\}\$/);
         const answer = answerMatch ? answerMatch[1] : '';
+        const renderedAnswer = renderLatex(answer);
         return (
           <div key={idx} className="my-3 p-4 bg-gradient-to-r from-green-900 to-blue-900 rounded-lg border-2 border-green-500">
             <p className="text-lg font-bold text-center text-green-200">
-              Final Answer: <span className="text-white">{answer}</span>
+              Final Answer: <span className="text-white font-mono">{renderedAnswer}</span>
             </p>
           </div>
         );
       }
 
-      // Process line with inline LaTeX \(...\) and bold **...**
+      // Process line with inline LaTeX and formatting
       const processedLine = formatInlineElements(line);
       
       return (
@@ -204,12 +236,11 @@ export default function VisionChat() {
     let currentIndex = 0;
     let key = 0;
 
-    // Regex to match \(...\) or **...**
-    const regex = /(\\\(.*?\\\)|\*\*.*?\*\*)/g;
+    // Enhanced regex to match \(...\), **...**, *_..._*, and other formatting
+    const regex = /(\\\(.*?\\\)|\*\*.*?\*\*|\*_.*?_\*|\b_.*?_\b|`.*?`)/g;
     let match;
 
     while ((match = regex.exec(text)) !== null) {
-      // Add text before the match
       if (match.index > currentIndex) {
         parts.push(
           <span key={key++}>{text.substring(currentIndex, match.index)}</span>
@@ -218,7 +249,7 @@ export default function VisionChat() {
 
       const matched = match[0];
 
-      // Check if it's LaTeX inline math \(...\)
+      // LaTeX inline math \(...\)
       if (matched.startsWith('\\(') && matched.endsWith('\\)')) {
         const formula = matched.replace(/\\\(|\\\)/g, '');
         const rendered = renderLatex(formula);
@@ -228,7 +259,7 @@ export default function VisionChat() {
           </code>
         );
       }
-      // Check if it's bold **...**
+      // Bold **...**
       else if (matched.startsWith('**') && matched.endsWith('**')) {
         const boldText = matched.replace(/\*\*/g, '');
         parts.push(
@@ -237,11 +268,37 @@ export default function VisionChat() {
           </strong>
         );
       }
+      // Italic with stars *...*
+      else if (matched.startsWith('*_') && matched.endsWith('_*')) {
+        const italicText = matched.replace(/\*_|_\*/g, '');
+        parts.push(
+          <em key={key++} className="italic text-gray-300">
+            {italicText}
+          </em>
+        );
+      }
+      // Italic with underscores _..._
+      else if (matched.startsWith('_') && matched.endsWith('_') && matched.length > 2) {
+        const italicText = matched.slice(1, -1);
+        parts.push(
+          <em key={key++} className="italic text-gray-300">
+            {italicText}
+          </em>
+        );
+      }
+      // Inline code `...`
+      else if (matched.startsWith('`') && matched.endsWith('`')) {
+        const codeText = matched.slice(1, -1);
+        parts.push(
+          <code key={key++} className="bg-gray-600 px-1 py-0.5 rounded text-orange-200 font-mono text-sm">
+            {codeText}
+          </code>
+        );
+      }
 
       currentIndex = match.index + matched.length;
     }
 
-    // Add remaining text
     if (currentIndex < text.length) {
       parts.push(<span key={key++}>{text.substring(currentIndex)}</span>);
     }
@@ -250,29 +307,95 @@ export default function VisionChat() {
   };
 
   const renderLatex = (formula) => {
-    // Replace common LaTeX commands with Unicode symbols
+    // Enhanced LaTeX to Unicode conversion
     let rendered = formula
+      // Greek letters
       .replace(/\\pi/g, 'π')
-      .replace(/\\times/g, '×')
-      .replace(/\\cdot/g, '·')
       .replace(/\\alpha/g, 'α')
       .replace(/\\beta/g, 'β')
       .replace(/\\gamma/g, 'γ')
       .replace(/\\delta/g, 'δ')
+      .replace(/\\epsilon/g, 'ε')
+      .replace(/\\zeta/g, 'ζ')
+      .replace(/\\eta/g, 'η')
       .replace(/\\theta/g, 'θ')
+      .replace(/\\iota/g, 'ι')
+      .replace(/\\kappa/g, 'κ')
       .replace(/\\lambda/g, 'λ')
       .replace(/\\mu/g, 'μ')
+      .replace(/\\nu/g, 'ν')
+      .replace(/\\xi/g, 'ξ')
+      .replace(/\\rho/g, 'ρ')
       .replace(/\\sigma/g, 'σ')
+      .replace(/\\tau/g, 'τ')
+      .replace(/\\phi/g, 'φ')
+      .replace(/\\chi/g, 'χ')
+      .replace(/\\psi/g, 'ψ')
+      .replace(/\\omega/g, 'ω')
+      
+      // Mathematical symbols
+      .replace(/\\times/g, '×')
+      .replace(/\\cdot/g, '·')
+      .replace(/\\div/g, '÷')
+      .replace(/\\pm/g, '±')
+      .replace(/\\mp/g, '∓')
       .replace(/\\infty/g, '∞')
       .replace(/\\approx/g, '≈')
       .replace(/\\neq/g, '≠')
       .replace(/\\leq/g, '≤')
       .replace(/\\geq/g, '≥')
-      .replace(/\\pm/g, '±')
-      .replace(/\\sqrt/g, '√');
+      .replace(/\\propto/g, '∝')
+      .replace(/\\partial/g, '∂')
+      .replace(/\\nabla/g, '∇')
+      .replace(/\\sum/g, '∑')
+      .replace(/\\prod/g, '∏')
+      .replace(/\\int/g, '∫')
+      .replace(/\\oint/g, '∮')
+      
+      // Set symbols
+      .replace(/\\in/g, '∈')
+      .replace(/\\notin/g, '∉')
+      .replace(/\\subset/g, '⊂')
+      .replace(/\\subseteq/g, '⊆')
+      .replace(/\\supset/g, '⊃')
+      .replace(/\\supseteq/g, '⊇')
+      .replace(/\\cup/g, '∪')
+      .replace(/\\cap/g, '∩')
+      .replace(/\\emptyset/g, '∅')
+      
+      // Logic symbols
+      .replace(/\\forall/g, '∀')
+      .replace(/\\exists/g, '∃')
+      .replace(/\\neg/g, '¬')
+      .replace(/\\land/g, '∧')
+      .replace(/\\lor/g, '∨')
+      .replace(/\\Rightarrow/g, '⇒')
+      .replace(/\\Leftrightarrow/g, '⇔');
 
-    // Handle fractions \frac{a}{b}
-    rendered = rendered.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
+    // Handle fractions \frac{a}{b} with proper formatting
+    rendered = rendered.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (match, num, den) => {
+      return `(${renderLatex(num)}/${renderLatex(den)})`;
+    });
+
+    // Handle exponents a^b
+    rendered = rendered.replace(/(\w+)\^\{?([^}]+)\}?/g, (match, base, exp) => {
+      return `${renderLatex(base)}⁽${renderLatex(exp)}⁾`;
+    });
+
+    // Handle subscripts a_b
+    rendered = rendered.replace(/(\w+)_\{?([^}]+)\}?/g, (match, base, sub) => {
+      return `${renderLatex(base)}₍${renderLatex(sub)}₎`;
+    });
+
+    // Handle square roots \sqrt{x}
+    rendered = rendered.replace(/\\sqrt\{([^}]+)\}/g, (match, content) => {
+      return `√(${renderLatex(content)})`;
+    });
+
+    // Handle nth roots \sqrt[n]{x}
+    rendered = rendered.replace(/\\sqrt\[([^\]]+)\]\{([^}]+)\}/g, (match, n, content) => {
+      return `√[${renderLatex(n)}](${renderLatex(content)})`;
+    });
 
     return rendered;
   };
@@ -348,10 +471,13 @@ export default function VisionChat() {
     setSelectedImage(null);
     setImageUrl('');
     setUploadError('');
+    setMessages([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  const canRedo = messages.some(msg => msg.type === 'user');
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -367,23 +493,52 @@ export default function VisionChat() {
               <p className="text-sm text-gray-400">Upload images and ask questions</p>
             </div>
           </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            {uploading ? (
+          <div className="flex items-center gap-2">
+            {canRedo && (
+              <button
+                onClick={redoLastQuestion}
+                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors"
+                title="Redo last question"
+              >
+                <Redo size={16} />
+              </button>
+            )}
+            {messages.length > 0 && (
               <>
-                <Loader2 size={18} className="animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Upload size={18} />
-                Upload Image
+                <button
+                  onClick={() => copyToClipboard(messages.map(m => m.content).join('\n\n'))}
+                  className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors"
+                  title="Copy conversation"
+                >
+                  <Copy size={16} />
+                </button>
+                <button
+                  onClick={shareContent}
+                  className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors"
+                  title="Share conversation"
+                >
+                  <Share2 size={16} />
+                </button>
               </>
             )}
-          </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload size={18} />
+                  Upload Image
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
